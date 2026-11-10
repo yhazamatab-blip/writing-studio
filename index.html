@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>オールインワン個人執筆スタジオ | Personal Writing Studio</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Serif+JP:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Remix Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body class="dark-theme">
+  <div id="app" class="app-container">
+
+    <!-- Top Header Navigation -->
+    <header class="main-header">
+      <div class="header-left">
+        <div class="logo">
+          <i class="ri-quill-pen-fill logo-icon"></i>
+          <span class="logo-text">Writing Studio</span>
+        </div>
+        <!-- Project Switcher Button -->
+        <button id="btn-project-manager" class="project-selector-btn" title="作品一覧・切り替え">
+          <i class="ri-folder-open-line"></i>
+          <span id="project-selector-label">作品切替</span>
+          <i class="ri-arrow-down-s-line"></i>
+        </button>
+        <div class="project-title-container">
+          <input type="text" id="project-title-input" value="無題の長編小説" placeholder="作品タイトルを入力...">
+          <span class="save-status-badge" id="save-status"><i class="ri-cloud-line"></i> 自動保存完了</span>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <!-- View Mode Selector -->
+        <div class="mode-switcher">
+          <button class="mode-btn active" data-mode="editor"><i class="ri-edit-3-line"></i> 執筆</button>
+          <button class="mode-btn" data-mode="split"><i class="ri-layout-column-line"></i> 分割</button>
+          <button class="mode-btn" data-mode="preview"><i class="ri-book-open-line"></i> プレビュー</button>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <!-- Stats summary -->
+        <div class="stats-summary" title="全体の文字数・原稿用紙換算">
+          <span class="stat-item"><i class="ri-font-size"></i> <strong id="total-char-count">0</strong> 字</span>
+          <span class="stat-divider">|</span>
+          <span class="stat-item"><i class="ri-file-text-line"></i> <strong id="genko-page-count">0</strong> 枚 (400字)</span>
+        </div>
+
+        <!-- Utility Action Buttons -->
+        <button id="btn-google-sync" class="google-sync-btn" title="Googleドライブ クラウド同期">
+          <i class="ri-google-fill"></i>
+          <span id="google-sync-label">クラウド同期</span>
+        </button>
+        <button id="btn-focus-mode" class="icon-btn" title="集中モード（フルスクリーン）">
+          <i class="ri-fullscreen-line"></i>
+        </button>
+        <button id="btn-export" class="icon-btn" title="データエクスポート/保存">
+          <i class="ri-download-2-line"></i>
+        </button>
+        <button id="btn-settings" class="icon-btn" title="設定・AI APIキー">
+          <i class="ri-settings-3-line"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <div class="workspace">
+
+      <!-- Left Sidebar: Project Navigator (Memo & Plot) -->
+      <aside class="sidebar left-sidebar" id="left-sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-tabs">
+            <button class="tab-btn active" data-tab="tab-outline"><i class="ri-list-check-2"></i> 本文・構成</button>
+            <button class="tab-btn" data-tab="tab-plot"><i class="ri-git-merge-line"></i> プロット</button>
+            <button class="tab-btn" data-tab="tab-memos"><i class="ri-sticky-note-line"></i> 設定メモ</button>
+          </div>
+        </div>
+
+        <div class="sidebar-body">
+          <!-- Tab 1: Outline / Chapters -->
+          <div class="tab-content active" id="tab-outline">
+            <div class="section-title-bar">
+              <span>章・シーン一覧</span>
+              <button class="action-sm-btn" id="btn-add-chapter"><i class="ri-add-line"></i> 新規章</button>
+            </div>
+            <div class="tree-list" id="chapter-tree-container">
+              <!-- Dynamically Populated -->
+            </div>
+          </div>
+
+          <!-- Tab 2: Plot Board / Outliner -->
+          <div class="tab-content" id="tab-plot">
+            <div class="section-title-bar">
+              <span>プロット構造シート</span>
+              <button class="action-sm-btn" id="btn-add-plot-node"><i class="ri-add-line"></i> カード追加</button>
+            </div>
+            <div class="plot-template-selector">
+              <label>構成テンプレート:</label>
+              <select id="plot-template-select">
+                <option value="four-act">起承転結 (4幕)</option>
+                <option value="three-act">三幕構成 (3-Act)</option>
+                <option value="custom">カスタム自由プロット</option>
+              </select>
+            </div>
+            <div class="plot-cards-container" id="plot-cards-container">
+              <!-- Dynamically Populated -->
+            </div>
+          </div>
+
+          <!-- Tab 3: Memos & World Building -->
+          <div class="tab-content" id="tab-memos">
+            <div class="section-title-bar">
+              <span>キャラクター・設定資料</span>
+              <button class="action-sm-btn" id="btn-add-memo"><i class="ri-add-line"></i> メモ作成</button>
+            </div>
+            <div class="memo-filter-bar">
+              <button class="filter-chip active" data-filter="all">すべて</button>
+              <button class="filter-chip" data-filter="character">人物</button>
+              <button class="filter-chip" data-filter="world">世界観</button>
+              <button class="filter-chip" data-filter="item">伏線・アイテム</button>
+            </div>
+            <div class="memos-list" id="memos-list-container">
+              <!-- Dynamically Populated -->
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center Main Content Area -->
+      <main class="main-content">
+        <!-- Editor Header Bar -->
+        <div class="editor-header-bar">
+          <div class="current-chapter-info">
+            <i class="ri-file-edit-line"></i>
+            <input type="text" id="chapter-title-input" value="第1章 旅立ちの朝" placeholder="章・シーン名...">
+          </div>
+
+          <div class="editor-tools">
+            <!-- Format Quick Shortcuts -->
+            <button class="tool-btn" id="tool-ruby" title="ルビ挿入（｜漢字《かんじ》）">ルビ</button>
+            <button class="tool-btn" id="tool-bouten" title="傍点挿入（《《強調》》）">傍点</button>
+            <button class="tool-btn" id="tool-dash" title="ダッシュ挿入（──）">──</button>
+            <button class="tool-btn" id="tool-ellipsis" title="リーダー挿入（……）">……</button>
+            <span class="tool-divider"></span>
+            <!-- Live Preview toggle mode -->
+            <button class="tool-btn-toggle" id="btn-toggle-writing-mode" title="縦書き/横書き切り替え">
+              <i class="ri-text-direction-l"></i> 縦書き/横書き
+            </button>
+          </div>
+        </div>
+
+        <!-- Dual Pane Container for Editor & Preview -->
+        <div class="editor-preview-split-container" id="split-container">
+          <!-- Main Text Editor -->
+          <div class="editor-pane" id="editor-pane">
+            <textarea id="main-editor" placeholder="ここに本文を執筆してください...
+ルビ記法: ｜漢字《かんじ》
+傍点記法: 《《強調したい言葉》》"></textarea>
+          </div>
+
+          <!-- Real-time Preview Pane -->
+          <div class="preview-pane vertical-mode" id="preview-pane">
+            <div class="preview-book-paper">
+              <div class="preview-header">
+                <span id="preview-chapter-title">第1章 旅立ちの朝</span>
+              </div>
+              <div class="preview-content-body" id="preview-content">
+                <!-- Parsed Japanese Vertical Text HTML -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Editor Footer Bar -->
+        <div class="editor-footer-bar">
+          <div class="footer-stat">
+            <span>選択章の文字数: <strong id="chapter-char-count">0</strong> 字</span>
+            <span class="stat-bullet">•</span>
+            <span>目標達成度: <strong id="target-progress-percent">0%</strong></span>
+          </div>
+          <div class="target-progress-bar-container">
+            <div class="target-progress-bar" id="target-progress-bar" style="width: 0%;"></div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Right Sidebar: Advisory AI Assistant -->
+      <aside class="sidebar right-sidebar" id="right-sidebar">
+        <div class="ai-header">
+          <div class="ai-title">
+            <i class="ri-sparkles-fill ai-icon"></i>
+            <span>執筆パートナー AI</span>
+          </div>
+          <select id="ai-persona-select" class="ai-persona-dropdown" title="AIの役割を選択">
+            <option value="adviser">💡 執筆アドバイザー</option>
+            <option value="critic">🔍 展開・伏線校正</option>
+            <option value="brainstorm">🎨 アイデア発想</option>
+            <option value="paraphrase">✍️ 表現・言い換え補助</option>
+          </select>
+        </div>
+
+        <!-- Quick AI Action Buttons -->
+        <div class="ai-quick-actions">
+          <button class="ai-chip-btn" data-action="review-plot"><i class="ri-lightbulb-line"></i> プロット相談</button>
+          <button class="ai-chip-btn" data-action="paraphrase"><i class="ri-magic-line"></i> 表現言い換え</button>
+          <button class="ai-chip-btn" data-action="check-inconsistency"><i class="ri-find-replace-line"></i> 矛盾チェック</button>
+        </div>
+
+        <!-- AI Chat Conversation Log -->
+        <div class="ai-chat-messages" id="ai-chat-messages">
+          <div class="ai-message assistant">
+            <div class="avatar"><i class="ri-sparkles-line"></i></div>
+            <div class="message-content">
+              こんにちは！執筆アシスタントです。現在執筆中のプロットや設定メモのコンテキストを踏まえて、展開の相談や表現のブラッシュアップをお手伝いします。何でも気軽に相談してくださいね！
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Chat Input Bar -->
+        <div class="ai-input-container">
+          <textarea id="ai-input-text" placeholder="AIに執筆相談... (Enterで送信, Shift+Enterで改行)"></textarea>
+          <button id="btn-send-ai" class="ai-send-btn"><i class="ri-send-plane-fill"></i></button>
+        </div>
+      </aside>
+
+    </div>
+
+    <!-- Mobile Bottom Navigation Bar (Visible on mobile / small screens) -->
+    <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+      <button class="mobile-nav-btn active" data-view="editor">
+        <i class="ri-edit-3-line"></i>
+        <span>執筆</span>
+      </button>
+      <button class="mobile-nav-btn" data-view="preview">
+        <i class="ri-book-open-line"></i>
+        <span>プレビュー</span>
+      </button>
+      <button class="mobile-nav-btn" data-view="notes">
+        <i class="ri-folder-open-line"></i>
+        <span>構成・メモ</span>
+      </button>
+      <button class="mobile-nav-btn" data-view="ai">
+        <i class="ri-sparkles-line"></i>
+        <span>相談AI</span>
+      </button>
+    </nav>
+
+    <!-- Modals -->
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="modal-settings">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3><i class="ri-settings-3-line"></i> 設定 & AI APIキー設定</h3>
+          <button class="modal-close" data-close="modal-settings"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>AIプロバイダー選択:</label>
+            <select id="ai-provider-select">
+              <option value="gemini">Google Gemini API (推奨・無料枠大)</option>
+              <option value="openai">OpenAI API (ChatGPT)</option>
+              <option value="ollama">ローカルLLM (Ollama / LM Studio)</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="group-api-key">
+            <label id="label-api-key">Gemini API Key:</label>
+            <input type="password" id="input-api-key" placeholder="AI Studioで取得したAPIキーを入力...">
+            <small class="form-help">APIキーは外部サーバーに送信されず、お使いのブラウザ内（ローカル）に安全に保存されます。</small>
+          </div>
+
+          <div class="form-group" id="group-model-name">
+            <label>使用モデル:</label>
+            <input type="text" id="input-model-name" value="gemini-2.5-flash" placeholder="gemini-2.5-flash / gpt-4o-mini / llama3">
+          </div>
+
+          <div class="form-group" id="group-ollama-url" style="display:none;">
+            <label>ローカルLLM エンドポイントURL:</label>
+            <input type="text" id="input-ollama-url" value="http://localhost:11434/api/generate">
+          </div>
+
+          <hr class="modal-divider">
+
+          <div class="form-group">
+            <label>目標文字数 (作品全体):</label>
+            <input type="number" id="input-target-words" value="50000" step="1000">
+          </div>
+
+          <div class="form-group">
+            <label>プレビューフォントサイズ (px):</label>
+            <input type="number" id="input-preview-fontsize" value="16" min="12" max="24">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="modal-settings">キャンセル</button>
+          <button class="btn-primary" id="btn-save-settings">保存する</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Memo Detail Modal -->
+    <div class="modal-overlay" id="modal-memo-edit">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3 id="memo-modal-title">設定メモの編集</h3>
+          <button class="modal-close" data-close="modal-memo-edit"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="edit-memo-id">
+          <div class="form-group">
+            <label>タイトル・名称:</label>
+            <input type="text" id="edit-memo-title" placeholder="例: 主人公 アリス / 魔法体系の法則">
+          </div>
+          <div class="form-group">
+            <label>カテゴリ:</label>
+            <select id="edit-memo-category">
+              <option value="character">人物・キャラクター</option>
+              <option value="world">世界観・用語・地理</option>
+              <option value="item">伏線・重要アイテム</option>
+              <option value="other">その他アイデアメモ</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>詳細説明・プロフィール・設定要約:</label>
+            <textarea id="edit-memo-content" rows="6" placeholder="特徴、背景、関係性、目的などの詳細を記入..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-danger" id="btn-delete-memo"><i class="ri-delete-bin-line"></i> 削除</button>
+          <button class="btn-secondary" data-close="modal-memo-edit">キャンセル</button>
+          <button class="btn-primary" id="btn-save-memo">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Project Manager Modal -->
+    <div class="modal-overlay" id="modal-project-manager">
+      <div class="modal-box modal-lg">
+        <div class="modal-header">
+          <h3><i class="ri-folder-open-line"></i> 作品ライブラリ（プロジェクト管理）</h3>
+          <button class="modal-close" data-close="modal-project-manager"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="project-manager-actions">
+            <span>管理中の作品一覧</span>
+            <div style="display:flex;gap:0.4rem;">
+              <input type="file" id="import-json-file" accept=".json" style="display:none;">
+              <button class="btn-secondary" id="btn-import-project" title="JSONファイルから作品を復元"><i class="ri-upload-2-line"></i> 復元・インポート</button>
+              <button class="btn-primary" id="btn-create-new-project"><i class="ri-add-line"></i> 新しい作品を作成</button>
+            </div>
+          </div>
+          <div class="project-list" id="project-list-container">
+            <!-- Dynamically populated project cards -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="modal-project-manager">閉じる</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Google Drive Sync Modal -->
+    <div class="modal-overlay" id="modal-google-sync">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3><i class="ri-google-fill" style="color:#ea4335;"></i> Googleドライブ クラウド同期</h3>
+          <button class="modal-close" data-close="modal-google-sync"><i class="ri-close-line"></i></button>
+        </div>
+        <div class="modal-body">
+          <p class="sync-desc">
+            執筆した全作品（本文・プロット・設定メモ）を<strong>Googleドライブや端末のファイルアプリ</strong>に安全に保存・復元できます。Google Cloudの設定は不要です！
+          </p>
+
+          <div class="sync-actions-group" style="margin: 0.8rem 0;">
+            <button class="btn-primary" id="btn-quick-drive-save" style="padding: 0.7rem; font-size: 0.95rem;">
+              <i class="ri-google-fill"></i> Googleドライブ / 端末へ保存・共有
+            </button>
+            <button class="btn-secondary" id="btn-quick-drive-restore" style="padding: 0.7rem; font-size: 0.95rem;">
+              <i class="ri-upload-cloud-line"></i> ドライブ / ファイルから復元
+            </button>
+          </div>
+
+          <details style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted);">
+            <summary style="cursor: pointer; padding: 0.3rem 0;">高度な設定（API直接連携を使用する場合）</summary>
+            <div style="margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.8rem;">
+              <div class="form-group">
+                <label>Google OAuth クライアントID:</label>
+                <input type="text" id="input-google-client-id" placeholder="例: 123456789-xxxx.apps.googleusercontent.com">
+                <small class="form-help">Google Cloud Consoleが使える環境でOAuthによる全自動同期を行う場合のみ入力します。</small>
+              </div>
+              <button class="btn-secondary" id="btn-google-login-action"><i class="ri-refresh-line"></i> API直接同期を試行</button>
+            </div>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" data-close="modal-google-sync">閉じる</button>
+          <button class="btn-primary" id="btn-save-google-settings">設定を保存</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
