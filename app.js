@@ -143,6 +143,17 @@ function getCurrentChapter() {
   return proj.chapters.find(c => c.id === proj.activeChapterId) || proj.chapters[0];
 }
 
+// Update Project Selector Label
+function updateProjectSelectorLabel() {
+  if (!elements.projectSelectorLabel) return;
+  const proj = getCurrentProject();
+  const isMobile = window.innerWidth <= 768;
+  const maxLen = isMobile ? 8 : 12;
+  elements.projectSelectorLabel.textContent = proj.title.length > maxLen
+    ? proj.title.substring(0, maxLen - 1) + "…"
+    : proj.title;
+}
+
 // Initialize App
 function init() {
   loadFromStorage();
@@ -225,11 +236,7 @@ function renderAll() {
 
   // Update Header Project Titles
   elements.projectTitleInput.value = proj.title;
-  if (elements.projectSelectorLabel) {
-    elements.projectSelectorLabel.textContent = proj.title.length > 12 
-      ? proj.title.substring(0, 11) + "…" 
-      : proj.title;
-  }
+  updateProjectSelectorLabel();
 
   // Update Mode buttons
   document.querySelectorAll(".mode-btn").forEach(btn => {
@@ -554,11 +561,7 @@ function setupEventListeners() {
   elements.projectTitleInput.oninput = (e) => {
     const proj = getCurrentProject();
     proj.title = e.target.value;
-    if (elements.projectSelectorLabel) {
-      elements.projectSelectorLabel.textContent = proj.title.length > 12 
-        ? proj.title.substring(0, 11) + "…" 
-        : proj.title;
-    }
+    updateProjectSelectorLabel();
     saveState();
   };
 
