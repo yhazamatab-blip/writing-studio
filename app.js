@@ -309,17 +309,22 @@ function renderEditorAndPreview() {
 
 // Parse Japanese Novel Formatting (Ruby & Emphasis) into HTML
 function parseJapaneseFormatting(text) {
-  if (!text) return "<p>本文を入力してください...</p>";
+  if (!text) return '<p class="empty-hint" style="color:var(--text-dark);">本文を入力してください...</p>';
 
   // Replace Ruby: ｜漢字《かんじ》 -> <ruby>漢字<rt>かんじ</rt></ruby>
   let html = text.replace(/｜([^《\n]+)《([^》\n]+)》/g, '<ruby>$1<rt>$2</rt></ruby>');
 
-  // Replace Emphasis: 《《言葉》》 -> <span style="text-emphasis: filled dot; -webkit-text-emphasis: filled dot;">言葉</span>
+  // Replace Emphasis: 《《言葉》》 -> <span style="text-emphasis: filled dot; -webkit-text-emphasis: filled dot; color: var(--accent-amber);">$1</span>
   html = html.replace(/《《([^》\n]+)》》/g, '<span style="text-emphasis: filled dot; -webkit-text-emphasis: filled dot; color: var(--accent-amber);">$1</span>');
 
-  // Split paragraphs by linebreaks
-  const paragraphs = html.split(/\n\n+/);
-  return paragraphs.map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+  // Split lines faithfully by newline (\n) so every line break and empty line is strictly preserved
+  const lines = html.split(/\r?\n/);
+  return lines.map(line => {
+    if (line === '') {
+      return '<p class="empty-line"><br></p>';
+    }
+    return `<p>${line}</p>`;
+  }).join('');
 }
 
 function updatePreviewHTML(text) {

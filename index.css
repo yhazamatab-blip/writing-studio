@@ -657,14 +657,29 @@ body, html {
   margin-left: 2rem;
 }
 
+.preview-content-body {
+  font-family: var(--font-serif);
+  line-height: 1.85;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .preview-content-body p {
-  margin-bottom: 1.2rem;
-  text-indent: 1em;
+  margin: 0;
+  padding: 0;
+  min-height: 1.85em;
+  /* text-indent is removed so user-input spaces are strictly honored without forced indentation */
+}
+
+.preview-pane.vertical-mode .preview-content-body {
+  line-height: 2.1;
+  white-space: pre-wrap;
 }
 
 .preview-pane.vertical-mode .preview-content-body p {
-  margin-bottom: 0;
-  margin-left: 1.4rem;
+  margin: 0;
+  padding: 0;
+  min-height: 1em;
 }
 
 /* Ruby HTML Formatting */
