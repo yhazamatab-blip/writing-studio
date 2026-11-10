@@ -323,7 +323,15 @@ function parseJapaneseFormatting(text) {
     if (line === '') {
       return '<p class="empty-line"><br></p>';
     }
-    return `<p>${line}</p>`;
+
+    // Convert leading half-width spaces into full-width spaces (1 space = 1マス)
+    // so indentation is accurately rendered as full character widths in Japanese novel typography
+    let processedLine = line.replace(/^[ \t]+/g, match => '　'.repeat(match.length));
+
+    // Also convert 2 or more consecutive spaces into full-width spaces so manual pauses/gaps are preserved
+    processedLine = processedLine.replace(/ {2,}/g, match => '　'.repeat(match.length));
+
+    return `<p>${processedLine}</p>`;
   }).join('');
 }
 
