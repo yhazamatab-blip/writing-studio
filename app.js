@@ -211,6 +211,9 @@ function loadFromStorage() {
         appData.activeProjectId = "proj-1";
         if (parsed.settings) {
           Object.assign(appData.globalSettings, parsed.settings);
+          if (!appData.globalSettings.modelName || appData.globalSettings.modelName === "gemini-2.5-flash") {
+            appData.globalSettings.modelName = "gemini-1.5-flash";
+          }
         }
       }
     }
@@ -1593,5 +1596,30 @@ function handleJsonImport(event) {
   reader.readAsText(file, "UTF-8");
 }
 
-// Start Application on Load
-window.addEventListener("DOMContentLoaded", init);
+// Start Application on Load (Robust for both normal and cached/bfcache reloads)
+let appInitialized = false;
+function startApp() {
+  if (appInitialized) return;
+  appInitialized = true;
+  try {
+    init();
+  } catch (err) {
+    console.error("Initialization error:", err);
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", startApp);
+} else {
+  startApp();
+}
+
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    try {
+      renderAll();
+    } catch (e) {
+      console.warn("pageshow restore error:", e);
+    }
+  }
+});
