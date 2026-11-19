@@ -9,7 +9,7 @@ const appData = {
   globalSettings: {
     aiProvider: "gemini",
     apiKey: "",
-    modelName: "gemini-2.5-flash",
+    modelName: "gemini-1.5-flash",
     ollamaUrl: "http://localhost:11434/api/generate",
     previewFontSize: 16,
     googleClientId: "",
@@ -94,8 +94,16 @@ const elements = {
 
   aiProviderSelect: document.getElementById("ai-provider-select"),
   inputApiKey: document.getElementById("input-api-key"),
+  selectModelPreset: document.getElementById("select-model-preset"),
   inputModelName: document.getElementById("input-model-name"),
   inputOllamaUrl: document.getElementById("input-ollama-url"),
+  btnTestApi: document.getElementById("btn-test-api"),
+  apiTestStatus: document.getElementById("api-test-status"),
+  apiKeyHelpLink: document.getElementById("api-key-help-link"),
+  groupApiKey: document.getElementById("group-api-key"),
+  groupModelName: document.getElementById("group-model-name"),
+  groupOllamaUrl: document.getElementById("group-ollama-url"),
+  labelApiKey: document.getElementById("label-api-key"),
   inputTargetWords: document.getElementById("input-target-words"),
   inputPreviewFontSize: document.getElementById("input-preview-fontsize"),
 
@@ -173,6 +181,10 @@ function loadFromStorage() {
         appData.activeProjectId = parsed.activeProjectId || parsed.projects[0].id;
         if (parsed.globalSettings) {
           Object.assign(appData.globalSettings, parsed.globalSettings);
+          // Auto-migrate broken/legacy model names
+          if (!appData.globalSettings.modelName || appData.globalSettings.modelName === "gemini-2.5-flash") {
+            appData.globalSettings.modelName = "gemini-1.5-flash";
+          }
         }
         return;
       }
@@ -698,6 +710,28 @@ function setupEventListeners() {
 
   document.getElementById("btn-save-settings").onclick = saveSettings;
 
+  if (elements.aiProviderSelect) {
+    elements.aiProviderSelect.onchange = () => {
+      updateSettingsUIForProvider(elements.aiProviderSelect.value);
+    };
+  }
+
+  if (elements.selectModelPreset) {
+    elements.selectModelPreset.onchange = () => {
+      if (elements.selectModelPreset.value === "custom") {
+        elements.inputModelName.style.display = "block";
+        elements.inputModelName.focus();
+      } else {
+        elements.inputModelName.style.display = "none";
+        elements.inputModelName.value = elements.selectModelPreset.value;
+      }
+    };
+  }
+
+  if (elements.btnTestApi) {
+    elements.btnTestApi.onclick = testApiConnection;
+  }
+
   // AI Chat Send & Quick Action
   elements.btnSendAi.onclick = handleAiSend;
   elements.aiInputText.onkeydown = (e) => {
@@ -845,14 +879,92 @@ function toggleFocusMode() {
   }
 }
 
+// Model Presets Definitions
+const MODEL_PRESETS = {
+  gemini: [
+    { value: "gemini-1.5-flash", label: "gemini-1.5-flash (推奨・高速・無料枠大)" },
+    { value: "gemini-1.5-pro", label: "gemini-1.5-pro (高精度・長文分析向け)" },
+    { value: "gemini-2.0-flash-exp", label: "gemini-2.0-flash-exp (最新実験モデル)" },
+    { value: "custom", label: "カスタムモデル名を直接入力..." }
+  ],
+  openai: [
+    { value: "gpt-4o-mini", label: "gpt-4o-mini (推奨・高速・安価)" },
+    { value: "gpt-4o", label: "gpt-4o (高性能フラグシップ)" },
+    { value: "custom", label: "カスタムモデル名を直接入力..." }
+  ],
+  ollama: [
+    { value: "llama3", label: "llama3 (標準)" },
+    { value: "gemma2", label: "gemma2" },
+    { value: "custom", label: "カスタムモデル名を直接入力..." }
+  ]
+};
+
+function updateSettingsUIForProvider(provider) {
+  if (provider === "ollama") {
+    if (elements.groupApiKey) elements.groupApiKey.style.display = "none";
+    if (elements.groupOllamaUrl) elements.groupOllamaUrl.style.display = "block";
+  } else {
+    if (elements.groupApiKey) elements.groupApiKey.style.display = "block";
+    if (elements.groupOllamaUrl) elements.groupOllamaUrl.style.display = "none";
+    if (elements.labelApiKey) {
+      elements.labelApiKey.textContent = provider === "openai" ? "OpenAI API Key:" : "Gemini API Key:";
+    }
+    if (elements.inputApiKey) {
+      elements.inputApiKey.placeholder = provider === "openai" ? "sk-..." : "AI Studioで取得したAPIキーを入力...";
+    }
+    if (elements.apiKeyHelpLink) {
+      elements.apiKeyHelpLink.style.display = provider === "gemini" ? "block" : "none";
+    }
+  }
+
+  // Populate presets
+  if (elements.selectModelPreset) {
+    elements.selectModelPreset.innerHTML = "";
+    const presets = MODEL_PRESETS[provider] || MODEL_PRESETS.gemini;
+    presets.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.value;
+      opt.textContent = p.label;
+      elements.selectModelPreset.appendChild(opt);
+    });
+  }
+}
+
 // Settings Modal
 function openSettingsModal() {
   const proj = getCurrentProject();
-  elements.aiProviderSelect.value = appData.globalSettings.aiProvider;
-  elements.inputApiKey.value = appData.globalSettings.apiKey;
-  elements.inputModelName.value = appData.globalSettings.modelName;
-  elements.inputOllamaUrl.value = appData.globalSettings.ollamaUrl;
+  const currentProvider = appData.globalSettings.aiProvider || "gemini";
+  elements.aiProviderSelect.value = currentProvider;
+  elements.inputApiKey.value = appData.globalSettings.apiKey || "";
+  elements.inputOllamaUrl.value = appData.globalSettings.ollamaUrl || "http://localhost:11434/api/generate";
   elements.inputTargetWords.value = proj.targetWords || 50000;
+
+  if (elements.apiTestStatus) {
+    elements.apiTestStatus.textContent = "";
+    elements.apiTestStatus.style.display = "none";
+  }
+
+  updateSettingsUIForProvider(currentProvider);
+
+  // Auto-migrate gemini-2.5-flash or missing model
+  let currentModel = appData.globalSettings.modelName;
+  if (!currentModel || currentModel === "gemini-2.5-flash") {
+    currentModel = currentProvider === "gemini" ? "gemini-1.5-flash" : (currentProvider === "openai" ? "gpt-4o-mini" : "llama3");
+    appData.globalSettings.modelName = currentModel;
+  }
+
+  // Check if currentModel exists in preset
+  const presets = MODEL_PRESETS[currentProvider] || [];
+  const match = presets.find(p => p.value === currentModel && p.value !== "custom");
+  if (match) {
+    elements.selectModelPreset.value = currentModel;
+    elements.inputModelName.style.display = "none";
+    elements.inputModelName.value = currentModel;
+  } else {
+    elements.selectModelPreset.value = "custom";
+    elements.inputModelName.style.display = "block";
+    elements.inputModelName.value = currentModel;
+  }
 
   elements.modalSettings.classList.add("active");
 }
@@ -860,14 +972,114 @@ function openSettingsModal() {
 function saveSettings() {
   const proj = getCurrentProject();
   appData.globalSettings.aiProvider = elements.aiProviderSelect.value;
-  appData.globalSettings.apiKey = elements.inputApiKey.value;
-  appData.globalSettings.modelName = elements.inputModelName.value;
-  appData.globalSettings.ollamaUrl = elements.inputOllamaUrl.value;
+  appData.globalSettings.apiKey = elements.inputApiKey.value.trim();
+
+  const preset = elements.selectModelPreset ? elements.selectModelPreset.value : "custom";
+  let finalModel = preset === "custom" ? elements.inputModelName.value.trim() : preset;
+  if (!finalModel || finalModel === "gemini-2.5-flash") {
+    finalModel = "gemini-1.5-flash";
+  }
+  appData.globalSettings.modelName = finalModel;
+  appData.globalSettings.ollamaUrl = elements.inputOllamaUrl.value.trim();
   proj.targetWords = parseInt(elements.inputTargetWords.value) || 50000;
 
   saveState();
   updateStats();
   elements.modalSettings.classList.remove("active");
+}
+
+// API Connection Test
+async function testApiConnection() {
+  const statusEl = elements.apiTestStatus || document.getElementById("api-test-status");
+  const testBtn = elements.btnTestApi || document.getElementById("btn-test-api");
+  const provider = elements.aiProviderSelect.value;
+  const apiKey = elements.inputApiKey.value.trim();
+
+  const preset = elements.selectModelPreset ? elements.selectModelPreset.value : "custom";
+  let model = preset === "custom" ? elements.inputModelName.value.trim() : preset;
+  if (!model || model === "gemini-2.5-flash") {
+    model = "gemini-1.5-flash";
+  }
+
+  statusEl.style.display = "inline";
+  statusEl.style.color = "var(--text-muted)";
+  statusEl.innerHTML = '<i class="ri-loader-4-line ri-spin"></i> テスト通信中...';
+  if (testBtn) testBtn.disabled = true;
+
+  try {
+    if (provider === "gemini") {
+      if (!apiKey) {
+        throw new Error("APIキーが入力されていません。");
+      }
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: "こんにちは！10文字以内で挨拶してください。" }] }]
+        })
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        const msg = errData.error?.message || `HTTP ${resp.status} ${resp.statusText}`;
+        if (resp.status === 400 || msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
+          throw new Error("APIキーが無効です。Google AI Studioで取得したキーを正しくコピーしているかご確認ください。");
+        }
+        if (resp.status === 404 || msg.includes("not found")) {
+          throw new Error(`モデル「${model}」が見つかりません。「gemini-1.5-flash」を選択してください。`);
+        }
+        throw new Error(msg);
+      }
+
+      const data = await resp.json();
+      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "OK";
+      statusEl.style.color = "#10b981";
+      statusEl.innerHTML = `<i class="ri-checkbox-circle-fill"></i> 接続成功！ (応答: ${escapeHTML(reply.trim())})`;
+    } else if (provider === "openai") {
+      if (!apiKey) {
+        throw new Error("APIキーが入力されていません。");
+      }
+      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model || "gpt-4o-mini",
+          messages: [{ role: "user", content: "Hi! Reply 'OK'." }],
+          max_tokens: 10
+        })
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `HTTP ${resp.status}`);
+      }
+      statusEl.style.color = "#10b981";
+      statusEl.innerHTML = '<i class="ri-checkbox-circle-fill"></i> 接続成功！OpenAI APIと正常に通信できました。';
+    } else if (provider === "ollama") {
+      const url = elements.inputOllamaUrl.value.trim() || "http://localhost:11434/api/generate";
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: model || "llama3",
+          prompt: "Hi",
+          stream: false
+        })
+      });
+      if (!resp.ok) throw new Error("ローカルLLMに接続できませんでした。");
+      statusEl.style.color = "#10b981";
+      statusEl.innerHTML = '<i class="ri-checkbox-circle-fill"></i> 接続成功！ローカルLLMと正常に通信できました。';
+    }
+  } catch (err) {
+    statusEl.style.color = "#ef4444";
+    statusEl.innerHTML = `<i class="ri-error-warning-fill"></i> ${escapeHTML(err.message)}`;
+  } finally {
+    if (testBtn) testBtn.disabled = false;
+  }
 }
 
 // Memo Modal Edit/Create
@@ -932,6 +1144,20 @@ async function handleAiSend() {
   elements.aiInputText.value = "";
   renderAiChat();
 
+  // Show temporary loading indicator
+  const loadingDiv = document.createElement("div");
+  loadingDiv.className = "ai-message assistant loading-msg";
+  loadingDiv.innerHTML = `
+    <div class="avatar"><i class="ri-sparkles-line"></i></div>
+    <div class="message-content" style="display:flex;align-items:center;gap:0.4rem;color:var(--text-muted);">
+      <i class="ri-loader-4-line ri-spin"></i>
+      <span>AIパートナーが執筆中・思考中...</span>
+    </div>
+  `;
+  elements.aiChatMessages.appendChild(loadingDiv);
+  elements.aiChatMessages.scrollTop = elements.aiChatMessages.scrollHeight;
+  elements.btnSendAi.disabled = true;
+
   // Prepare context payload from manuscript & memos
   const contextSummary = buildProjectContextSummary();
   const persona = elements.aiPersonaSelect.value;
@@ -947,8 +1173,12 @@ async function handleAiSend() {
     console.error("AI API Error:", err);
     proj.aiChatHistory.push({
       role: "assistant",
-      content: `⚠️ AIとの接続中にエラーが発生しました。\n詳細: ${err.message}\n(設定画面でAPIキーやモデル名が正しく設定されているかご確認ください)`
+      content: `⚠️ AIとの接続中にエラーが発生しました。\n詳細: ${err.message}\n\n💡 画面上部の「⚙️（設定）」からAPIキーやモデル（gemini-1.5-flash推奨）をご確認いただき、「API接続テスト」をお試しください。`
     });
+  } finally {
+    const currentLoading = elements.aiChatMessages.querySelector(".loading-msg");
+    if (currentLoading) currentLoading.remove();
+    elements.btnSendAi.disabled = false;
   }
   
   renderAiChat();
@@ -983,13 +1213,17 @@ function getPersonaSystemPrompt(persona) {
 // Call AI Provider API
 async function callAiProvider(prompt) {
   const provider = appData.globalSettings.aiProvider;
-  const apiKey = appData.globalSettings.apiKey;
+  const apiKey = (appData.globalSettings.apiKey || "").trim();
 
   if (provider === "gemini") {
     if (!apiKey) {
-      throw new Error("Gemini APIキーが設定されていません。ヘッダーの「歯車アイコン」から設定してください。");
+      throw new Error("Gemini APIキーが設定されていません。ヘッダーの「⚙️（歯車アイコン）」からAPIキーを設定してください。");
     }
-    const model = appData.globalSettings.modelName || "gemini-2.5-flash";
+    let model = (appData.globalSettings.modelName || "").trim();
+    if (!model || model === "gemini-2.5-flash") {
+      model = "gemini-1.5-flash";
+      appData.globalSettings.modelName = "gemini-1.5-flash";
+    }
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const resp = await fetch(url, {
@@ -1002,17 +1236,38 @@ async function callAiProvider(prompt) {
 
     if (!resp.ok) {
       const errData = await resp.json().catch(() => ({}));
-      throw new Error(errData.error?.message || `HTTP ${resp.status} ${resp.statusText}`);
+      const msg = errData.error?.message || `HTTP ${resp.status} ${resp.statusText}`;
+      if (resp.status === 400 || msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
+        throw new Error("APIキーが無効です。Google AI Studioで取得したキーを正しくコピーしているか、余分なスペースが入っていないかご確認ください。");
+      }
+      if (resp.status === 404 || msg.includes("not found")) {
+        throw new Error(`モデル「${model}」が見つかりません。設定画面で「gemini-1.5-flash」に変更してください。`);
+      }
+      throw new Error(msg);
     }
 
     const data = await resp.json();
-    return data.candidates[0].content.parts[0].text;
+    const candidate = data.candidates?.[0];
+    if (!candidate) {
+      if (data.promptFeedback?.blockReason) {
+        throw new Error(`プロンプトがブロックされました (理由: ${data.promptFeedback.blockReason})`);
+      }
+      throw new Error("AIから応答候補が得られませんでした。");
+    }
+    if (candidate.finishReason === "SAFETY") {
+      throw new Error("セーフティフィルターにより応答が制限されました。表現を少し柔らかくして再度お試しください。");
+    }
+    const text = candidate.content?.parts?.map(p => p.text).filter(Boolean).join("\n");
+    if (!text) {
+      throw new Error("AIの応答が空でした。");
+    }
+    return text;
   } 
   else if (provider === "openai") {
     if (!apiKey) {
-      throw new Error("OpenAI APIキーが設定されていません。");
+      throw new Error("OpenAI APIキーが設定されていません。ヘッダーの「⚙️（設定）」から設定してください。");
     }
-    const model = appData.globalSettings.modelName || "gpt-4o-mini";
+    const model = (appData.globalSettings.modelName || "gpt-4o-mini").trim();
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -1031,11 +1286,11 @@ async function callAiProvider(prompt) {
     }
 
     const data = await resp.json();
-    return data.choices[0].message.content;
+    return data.choices?.[0]?.message?.content || "";
   }
   else if (provider === "ollama") {
-    const url = appData.globalSettings.ollamaUrl || "http://localhost:11434/api/generate";
-    const model = appData.globalSettings.modelName || "llama3";
+    const url = (appData.globalSettings.ollamaUrl || "http://localhost:11434/api/generate").trim();
+    const model = (appData.globalSettings.modelName || "llama3").trim();
 
     const resp = await fetch(url, {
       method: "POST",
@@ -1051,6 +1306,9 @@ async function callAiProvider(prompt) {
     const data = await resp.json();
     return data.response;
   }
+
+  throw new Error("未対応のAIプロバイダーです。");
+}
 
   throw new Error("未対応のAIプロバイダーです。");
 }

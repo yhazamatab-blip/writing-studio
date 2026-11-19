@@ -1529,5 +1529,16 @@ rt {
   gap: 0.6rem;
 }
 
+/* Spinner & Icon Animation */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.ri-spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+
 
 

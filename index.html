@@ -274,11 +274,28 @@
             <label id="label-api-key">Gemini API Key:</label>
             <input type="password" id="input-api-key" placeholder="AI Studioで取得したAPIキーを入力...">
             <small class="form-help">APIキーは外部サーバーに送信されず、お使いのブラウザ内（ローカル）に安全に保存されます。</small>
+            <div id="api-key-help-link" style="margin-top:0.35rem;">
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--accent-primary);font-size:0.8rem;text-decoration:underline;">
+                <i class="ri-external-link-line"></i> Google AI Studioで無料APIキーを取得（クレカ不要・無料）
+              </a>
+            </div>
+            <div style="margin-top:0.6rem;display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+              <button type="button" class="btn-secondary" id="btn-test-api" style="padding:0.35rem 0.8rem;font-size:0.82rem;">
+                <i class="ri-signal-tower-line"></i> API接続テスト
+              </button>
+              <span id="api-test-status" style="font-size:0.82rem;"></span>
+            </div>
           </div>
 
           <div class="form-group" id="group-model-name">
             <label>使用モデル:</label>
-            <input type="text" id="input-model-name" value="gemini-2.5-flash" placeholder="gemini-2.5-flash / gpt-4o-mini / llama3">
+            <select id="select-model-preset">
+              <option value="gemini-1.5-flash">gemini-1.5-flash (推奨・高速・無料枠大)</option>
+              <option value="gemini-1.5-pro">gemini-1.5-pro (高精度・長文分析向け)</option>
+              <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp (最新実験モデル)</option>
+              <option value="custom">カスタムモデル名を直接入力...</option>
+            </select>
+            <input type="text" id="input-model-name" value="gemini-1.5-flash" style="margin-top:0.4rem;display:none;" placeholder="モデル名を入力...">
           </div>
 
           <div class="form-group" id="group-ollama-url" style="display:none;">
