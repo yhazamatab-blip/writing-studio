@@ -1310,9 +1310,6 @@ async function callAiProvider(prompt) {
   throw new Error("未対応のAIプロバイダーです。");
 }
 
-  throw new Error("未対応のAIプロバイダーです。");
-}
-
 // Export / Share Project Data (Web Share API for Google Drive/Files with fallback to download)
 async function exportProjectData() {
   const proj = getCurrentProject();
