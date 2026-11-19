@@ -9,7 +9,7 @@ const appData = {
   globalSettings: {
     aiProvider: "gemini",
     apiKey: "",
-    modelName: "gemini-1.5-flash",
+    modelName: "gemini-3.8-flash",
     ollamaUrl: "http://localhost:11434/api/generate",
     previewFontSize: 16,
     googleClientId: "",
@@ -183,7 +183,7 @@ function loadFromStorage() {
           Object.assign(appData.globalSettings, parsed.globalSettings);
           // Auto-migrate broken/legacy model names
           if (!appData.globalSettings.modelName || appData.globalSettings.modelName === "gemini-2.5-flash") {
-            appData.globalSettings.modelName = "gemini-1.5-flash";
+            appData.globalSettings.modelName = "gemini-3.8-flash";
           }
         }
         return;
@@ -212,7 +212,7 @@ function loadFromStorage() {
         if (parsed.settings) {
           Object.assign(appData.globalSettings, parsed.settings);
           if (!appData.globalSettings.modelName || appData.globalSettings.modelName === "gemini-2.5-flash") {
-            appData.globalSettings.modelName = "gemini-1.5-flash";
+            appData.globalSettings.modelName = "gemini-3.8-flash";
           }
         }
       }
@@ -885,7 +885,8 @@ function toggleFocusMode() {
 // Model Presets Definitions
 const MODEL_PRESETS = {
   gemini: [
-    { value: "gemini-1.5-flash", label: "gemini-1.5-flash (推奨・高速・無料枠大)" },
+    { value: "gemini-3.8-flash", label: "gemini-3.8-flash (最新・推奨・高速)" },
+    { value: "gemini-1.5-flash", label: "gemini-1.5-flash (標準)" },
     { value: "gemini-1.5-pro", label: "gemini-1.5-pro (高精度・長文分析向け)" },
     { value: "gemini-2.0-flash-exp", label: "gemini-2.0-flash-exp (最新実験モデル)" },
     { value: "custom", label: "カスタムモデル名を直接入力..." }
@@ -952,7 +953,7 @@ function openSettingsModal() {
   // Auto-migrate gemini-2.5-flash or missing model
   let currentModel = appData.globalSettings.modelName;
   if (!currentModel || currentModel === "gemini-2.5-flash") {
-    currentModel = currentProvider === "gemini" ? "gemini-1.5-flash" : (currentProvider === "openai" ? "gpt-4o-mini" : "llama3");
+    currentModel = currentProvider === "gemini" ? "gemini-3.8-flash" : (currentProvider === "openai" ? "gpt-4o-mini" : "llama3");
     appData.globalSettings.modelName = currentModel;
   }
 
@@ -980,7 +981,7 @@ function saveSettings() {
   const preset = elements.selectModelPreset ? elements.selectModelPreset.value : "custom";
   let finalModel = preset === "custom" ? elements.inputModelName.value.trim() : preset;
   if (!finalModel || finalModel === "gemini-2.5-flash") {
-    finalModel = "gemini-1.5-flash";
+    finalModel = "gemini-3.8-flash";
   }
   appData.globalSettings.modelName = finalModel;
   appData.globalSettings.ollamaUrl = elements.inputOllamaUrl.value.trim();
@@ -1001,7 +1002,7 @@ async function testApiConnection() {
   const preset = elements.selectModelPreset ? elements.selectModelPreset.value : "custom";
   let model = preset === "custom" ? elements.inputModelName.value.trim() : preset;
   if (!model || model === "gemini-2.5-flash") {
-    model = "gemini-1.5-flash";
+    model = "gemini-3.8-flash";
   }
 
   statusEl.style.display = "inline";
@@ -1014,8 +1015,12 @@ async function testApiConnection() {
       if (!apiKey) {
         throw new Error("APIキーが入力されていません。");
       }
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const resp = await fetch(url, {
+      let targetModel = model;
+      if (!targetModel || targetModel === "gemini-2.5-flash") {
+        targetModel = "gemini-3.8-flash";
+      }
+      let url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+      let resp = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1026,13 +1031,35 @@ async function testApiConnection() {
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}));
         const msg = errData.error?.message || `HTTP ${resp.status} ${resp.statusText}`;
-        if (resp.status === 400 || msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
-          throw new Error("APIキーが無効です。Google AI Studioで取得したキーを正しくコピーしているかご確認ください。");
+
+        // Auto-retry with gemini-3.8-flash if model was deprecated
+        if (targetModel !== "gemini-3.8-flash" && (msg.includes("no longer available") || msg.includes("gemini-3.8-flash") || msg.includes("not found"))) {
+          targetModel = "gemini-3.8-flash";
+          appData.globalSettings.modelName = "gemini-3.8-flash";
+          if (elements.selectModelPreset) elements.selectModelPreset.value = "gemini-3.8-flash";
+          if (elements.inputModelName) elements.inputModelName.value = "gemini-3.8-flash";
+          saveState();
+          url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+          resp = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: "こんにちは！10文字以内で挨拶してください。" }] }]
+            })
+          });
         }
-        if (resp.status === 404 || msg.includes("not found")) {
-          throw new Error(`モデル「${model}」が見つかりません。「gemini-1.5-flash」を選択してください。`);
+
+        if (!resp.ok) {
+          const retryErr = await resp.json().catch(() => ({}));
+          const retryMsg = retryErr.error?.message || `HTTP ${resp.status} ${resp.statusText}`;
+          if (resp.status === 400 || retryMsg.includes("API_KEY_INVALID") || retryMsg.includes("API key not valid")) {
+            throw new Error("APIキーが無効です。Google AI Studioで取得したキーを正しくコピーしているかご確認ください。");
+          }
+          if (resp.status === 404 || retryMsg.includes("not found")) {
+            throw new Error(`モデル「${targetModel}」が見つかりません。「gemini-3.8-flash」を選択してください。`);
+          }
+          throw new Error(retryMsg);
         }
-        throw new Error(msg);
       }
 
       const data = await resp.json();
@@ -1176,7 +1203,7 @@ async function handleAiSend() {
     console.error("AI API Error:", err);
     proj.aiChatHistory.push({
       role: "assistant",
-      content: `⚠️ AIとの接続中にエラーが発生しました。\n詳細: ${err.message}\n\n💡 画面上部の「⚙️（設定）」からAPIキーやモデル（gemini-1.5-flash推奨）をご確認いただき、「API接続テスト」をお試しください。`
+      content: `⚠️ AIとの接続中にエラーが発生しました。\n詳細: ${err.message}\n\n💡 画面上部の「⚙️（設定）」からAPIキーやモデル（gemini-3.8-flash推奨）をご確認いただき、「API接続テスト」をお試しください。`
     });
   } finally {
     const currentLoading = elements.aiChatMessages.querySelector(".loading-msg");
@@ -1224,8 +1251,8 @@ async function callAiProvider(prompt) {
     }
     let model = (appData.globalSettings.modelName || "").trim();
     if (!model || model === "gemini-2.5-flash") {
-      model = "gemini-1.5-flash";
-      appData.globalSettings.modelName = "gemini-1.5-flash";
+      model = "gemini-3.8-flash";
+      appData.globalSettings.modelName = "gemini-3.8-flash";
     }
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -1240,11 +1267,20 @@ async function callAiProvider(prompt) {
     if (!resp.ok) {
       const errData = await resp.json().catch(() => ({}));
       const msg = errData.error?.message || `HTTP ${resp.status} ${resp.statusText}`;
+
+      // Auto-fallback if model is deprecated or not found, retry with gemini-3.8-flash
+      if (model !== "gemini-3.8-flash" && (msg.includes("no longer available") || msg.includes("gemini-3.8-flash") || msg.includes("not found") || msg.includes("is not supported"))) {
+        console.warn(`Model ${model} unavailable, auto-upgrading to gemini-3.8-flash...`);
+        appData.globalSettings.modelName = "gemini-3.8-flash";
+        saveState();
+        return callAiProvider(prompt);
+      }
+
       if (resp.status === 400 || msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
         throw new Error("APIキーが無効です。Google AI Studioで取得したキーを正しくコピーしているか、余分なスペースが入っていないかご確認ください。");
       }
       if (resp.status === 404 || msg.includes("not found")) {
-        throw new Error(`モデル「${model}」が見つかりません。設定画面で「gemini-1.5-flash」に変更してください。`);
+        throw new Error(`モデル「${model}」が見つかりません。設定画面で「gemini-3.8-flash」に変更してください。`);
       }
       throw new Error(msg);
     }
