@@ -326,8 +326,8 @@ function renderEditorAndPreview() {
 function parseJapaneseFormatting(text) {
   if (!text) return '<p class="empty-hint" style="color:var(--text-dark);">本文を入力してください...</p>';
 
-  // Replace Ruby: ｜漢字《かんじ》 -> <ruby>漢字<rt>かんじ</rt></ruby>
-  let html = text.replace(/｜([^《\n]+)《([^》\n]+)》/g, '<ruby>$1<rt>$2</rt></ruby>');
+  // Replace Ruby: ｜漢字《かんじ》 -> <ruby>漢字<rt>かんじ</rt></ruby> (カクヨム仕様: 親文字20文字以内・ルビ50文字以内)
+  let html = text.replace(/｜([^《\n]{1,20})《([^》\n]{1,50})》/g, '<ruby>$1<rt>$2</rt></ruby>');
 
   // Replace Emphasis: 《《言葉》》 -> <span style="text-emphasis: filled dot; -webkit-text-emphasis: filled dot; color: var(--accent-amber);">$1</span>
   html = html.replace(/《《([^》\n]+)》》/g, '<span style="text-emphasis: filled dot; -webkit-text-emphasis: filled dot; color: var(--accent-amber);">$1</span>');
@@ -765,7 +765,7 @@ function setupEventListeners() {
       } else if (action === "check-inconsistency") {
         elements.aiInputText.value = "設定メモの人物設定や世界観と、現在の本文に矛盾や不自然な点がないか確認してください。";
       }
-      handleAiSend();
+      elements.aiInputText.focus();
     };
   });
 
