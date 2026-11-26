@@ -23,7 +23,7 @@
         <div class="logo">
           <i class="ri-quill-pen-fill logo-icon"></i>
           <span class="logo-text">Writing Studio</span>
-          <span class="version-badge" style="font-size:0.68rem;background:rgba(99,102,241,0.2);color:var(--accent-secondary);padding:2px 6px;border-radius:6px;margin-left:4px;">v1.2.4</span>
+          <span class="version-badge" style="font-size:0.68rem;background:rgba(99,102,241,0.2);color:var(--accent-secondary);padding:2px 6px;border-radius:6px;margin-left:4px;">v1.2.5</span>
         </div>
         <!-- Project Switcher Button -->
         <button id="btn-project-manager" class="project-selector-btn" title="作品一覧・切り替え">
@@ -225,8 +225,14 @@
         </div>
 
         <!-- AI Chat Input Bar -->
+        <div class="ai-input-options" style="padding: 4px 12px 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 0.75rem; color: var(--text-muted);">
+          <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="chk-enter-to-send" style="cursor: pointer;">
+            <span>Enterで送信</span>
+          </label>
+        </div>
         <div class="ai-input-container">
-          <textarea id="ai-input-text" placeholder="AIに執筆相談... (Enterで送信, Shift+Enterで改行)"></textarea>
+          <textarea id="ai-input-text" placeholder="AIに執筆相談..."></textarea>
           <button id="btn-send-ai" class="ai-send-btn"><i class="ri-send-plane-fill"></i></button>
         </div>
       </aside>

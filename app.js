@@ -737,10 +737,17 @@ function setupEventListeners() {
 
   // AI Chat Send & Quick Action
   elements.btnSendAi.onclick = handleAiSend;
+  const chkEnterToSend = document.getElementById("chk-enter-to-send");
+  if (chkEnterToSend) {
+    chkEnterToSend.checked = Boolean(appData.globalSettings.enterToSend);
+    chkEnterToSend.onchange = () => {
+      appData.globalSettings.enterToSend = chkEnterToSend.checked;
+      saveState();
+    };
+  }
+
   elements.aiInputText.onkeydown = (e) => {
-    // スマホ・タブレット（タッチ端末）では Enter で改行できるようにし、送信ボタンのみで送信する
-    const isTouchDevice = window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 768;
-    if (isTouchDevice) return;
+    if (!appData.globalSettings.enterToSend) return;
 
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
