@@ -1249,58 +1249,118 @@ async function callAiProvider(prompt) {
     if (!apiKey) {
       throw new Error("Gemini APIキーが設定されていません。ヘッダーの「⚙️（歯車アイコン）」からAPIキーを設定してください。");
     }
-    let model = (appData.globalSettings.modelName || "").trim();
-    if (!model || model === "gemini-2.5-flash") {
-      model = "gemini-3.8-flash";
-      appData.globalSettings.modelName = "gemini-3.8-flash";
+
+    // --- Multi-model auto-routing ---
+    // Try models in order; skip 503/429/overloaded ones automatically
+    let preferredModel = (appData.globalSettings.modelName || "").trim();
+    if (!preferredModel || preferredModel === "gemini-2.5-flash") {
+      preferredModel = "gemini-3.8-flash";
     }
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
-    });
+    // Build routing list: preferred model first, then fallbacks (excluding duplicates)
+    const FALLBACK_MODELS = [
+      "gemini-2.0-flash-exp",
+      "gemini-1.5-flash",
+      "gemini-1.5-pro"
+    ];
+    const modelQueue = [preferredModel, ...FALLBACK_MODELS.filter(m => m !== preferredModel)];
 
-    if (!resp.ok) {
-      const errData = await resp.json().catch(() => ({}));
-      const msg = errData.error?.message || `HTTP ${resp.status} ${resp.statusText}`;
+    // Error patterns that should trigger fallback to next model
+    const isOverloadError = (status, msg) =>
+      status === 503 || status === 429 ||
+      msg.includes("high demand") || msg.includes("overloaded") ||
+      msg.includes("temporarily unavailable") || msg.includes("rate") ||
+      msg.includes("quota") || msg.includes("Resource has been exhausted") ||
+      msg.includes("RESOURCE_EXHAUSTED") || msg.includes("UNAVAILABLE");
 
-      // Auto-fallback if model is deprecated or not found, retry with gemini-3.8-flash
-      if (model !== "gemini-3.8-flash" && (msg.includes("no longer available") || msg.includes("gemini-3.8-flash") || msg.includes("not found") || msg.includes("is not supported"))) {
-        console.warn(`Model ${model} unavailable, auto-upgrading to gemini-3.8-flash...`);
-        appData.globalSettings.modelName = "gemini-3.8-flash";
-        saveState();
-        return callAiProvider(prompt);
+    // Error patterns that mean the model itself is gone (skip permanently)
+    const isModelGoneError = (msg) =>
+      msg.includes("no longer available") || msg.includes("not found") ||
+      msg.includes("is not supported") || msg.includes("MODEL_NOT_FOUND");
+
+    let lastError = null;
+    let attemptedModels = [];
+
+    for (let i = 0; i < modelQueue.length; i++) {
+      const model = modelQueue[i];
+      attemptedModels.push(model);
+
+      // Update loading message if retrying
+      if (i > 0) {
+        const loadingEl = document.getElementById("ai-loading-text");
+        if (loadingEl) loadingEl.textContent = `AIが応答中... (モデル切替中: ${model})`;
+        console.info(`[AI Router] Trying model ${i + 1}/${modelQueue.length}: ${model}`);
       }
 
-      if (resp.status === 400 || msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
-        throw new Error("APIキーが無効です。Google AI Studioで取得したキーを正しくコピーしているか、余分なスペースが入っていないかご確認ください。");
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+      let resp;
+      try {
+        resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        });
+      } catch (networkErr) {
+        lastError = networkErr;
+        console.warn(`[AI Router] Network error on ${model}:`, networkErr);
+        continue; // try next model
       }
-      if (resp.status === 404 || msg.includes("not found")) {
-        throw new Error(`モデル「${model}」が見つかりません。設定画面で「gemini-3.8-flash」に変更してください。`);
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        const msg = errData.error?.message || `HTTP ${resp.status} ${resp.statusText}`;
+
+        // API key errors — no point retrying with other models
+        if (resp.status === 400 && (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid"))) {
+          throw new Error("APIキーが無効です。Google AI Studioで取得したキーを正しくコピーしているか、余分なスペースが入っていないかご確認ください。");
+        }
+
+        // Overloaded / rate limited → try next model
+        if (isOverloadError(resp.status, msg)) {
+          console.warn(`[AI Router] ${model} overloaded (${resp.status}), trying next...`);
+          lastError = new Error(msg);
+          continue;
+        }
+
+        // Model gone / deprecated → try next model
+        if (isModelGoneError(msg)) {
+          console.warn(`[AI Router] ${model} unavailable (deprecated/not found), trying next...`);
+          lastError = new Error(msg);
+          continue;
+        }
+
+        // Other errors (should not retry)
+        throw new Error(msg);
       }
-      throw new Error(msg);
+
+      // --- Success ---
+      const data = await resp.json();
+      const candidate = data.candidates?.[0];
+      if (!candidate) {
+        if (data.promptFeedback?.blockReason) {
+          throw new Error(`プロンプトがブロックされました (理由: ${data.promptFeedback.blockReason})`);
+        }
+        throw new Error("AIから応答候補が得られませんでした。");
+      }
+      if (candidate.finishReason === "SAFETY") {
+        throw new Error("セーフティフィルターにより応答が制限されました。表現を少し柔らかくして再度お試しください。");
+      }
+      const text = candidate.content?.parts?.map(p => p.text).filter(Boolean).join("\n");
+      if (!text) {
+        throw new Error("AIの応答が空でした。");
+      }
+
+      if (i > 0) {
+        console.info(`[AI Router] Success with fallback model: ${model}`);
+      }
+      return text;
     }
 
-    const data = await resp.json();
-    const candidate = data.candidates?.[0];
-    if (!candidate) {
-      if (data.promptFeedback?.blockReason) {
-        throw new Error(`プロンプトがブロックされました (理由: ${data.promptFeedback.blockReason})`);
-      }
-      throw new Error("AIから応答候補が得られませんでした。");
-    }
-    if (candidate.finishReason === "SAFETY") {
-      throw new Error("セーフティフィルターにより応答が制限されました。表現を少し柔らかくして再度お試しください。");
-    }
-    const text = candidate.content?.parts?.map(p => p.text).filter(Boolean).join("\n");
-    if (!text) {
-      throw new Error("AIの応答が空でした。");
-    }
-    return text;
+    // All models failed
+    throw new Error(`すべてのAIモデルが応答できませんでした（試行: ${attemptedModels.join(" → ")}）。しばらく待ってから再度お試しください。\n詳細: ${lastError?.message || "不明なエラー"}`);
   } 
   else if (provider === "openai") {
     if (!apiKey) {
