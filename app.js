@@ -738,7 +738,11 @@ function setupEventListeners() {
   // AI Chat Send & Quick Action
   elements.btnSendAi.onclick = handleAiSend;
   elements.aiInputText.onkeydown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // スマホ・タブレット（タッチ端末）では Enter で改行できるようにし、送信ボタンのみで送信する
+    const isTouchDevice = window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 768;
+    if (isTouchDevice) return;
+
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       handleAiSend();
     }
